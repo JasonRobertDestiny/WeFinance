@@ -242,3 +242,7 @@ def render() -> None:
                 st.success(f"**{insight.title}**：{insight.detail}")
         else:
             st.info(i18n.t("spending.insight_none"))
+
+
+if __name__ == "__main__":  # pragma: no cover - streamlit entry point
+    render()

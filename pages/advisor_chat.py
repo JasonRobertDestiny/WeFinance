@@ -85,3 +85,7 @@ def render() -> None:
                 first_key = next(iter(cache))
                 cache.pop(first_key, None)
             st.write(response)
+
+
+if __name__ == "__main__":  # pragma: no cover - streamlit entry point
+    render()

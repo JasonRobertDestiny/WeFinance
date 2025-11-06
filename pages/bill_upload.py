@@ -364,3 +364,7 @@ def render() -> None:
 
     if manual_mode:
         _render_manual_entry(i18n)
+
+
+if __name__ == "__main__":  # pragma: no cover - streamlit entry point
+    render()

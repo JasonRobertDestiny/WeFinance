@@ -218,3 +218,7 @@ def render() -> None:
             _render_results(cached)
         else:
             st.info(i18n.t("recommendation.info_wait"))
+
+
+if __name__ == "__main__":  # pragma: no cover - streamlit entry point
+    render()
