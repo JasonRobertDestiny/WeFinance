@@ -14,6 +14,7 @@ WeFinance Copilot通过**图像OCR识别 + 生成式AI**，将纸质/电子账�
 - 成本优化97%（混合OCR架构：30元→1元/100张图片）
 - 隐私保护（图片本地处理，零上传）
 - 轻量化设计（10天开发周期，无数据库依赖）
+- 中英文界面一键切换（完整 i18n 方案 + 缓存）
 
 ## 快速开始
 
@@ -47,6 +48,8 @@ conda activate wefinance
 
 # 验证安装
 python --version  # 应显示 Python 3.10.x
+# 如需使用pytest-cov等开发工具
+pip install -r requirements.txt
 ```
 
 #### 方式C：从零开始（详细步骤）
@@ -105,6 +108,13 @@ streamlit run app.py
 
 应用将在浏览器中打开：`http://localhost:8501`
 
+### 5. 界面语言切换
+
+- 默认语言：中文（简体）
+- 切换方式：在左侧侧边栏的「界面语言」下拉框选择 `中文 / English`
+- 实时生效：导航、页面标题、提示信息、对话回复与推荐结果都会即时更新，无需刷新
+- 缓存策略：热点数据（分析结果、推荐方案、聊天缓存）自动按语言分开缓存，避免串联
+
 ## 项目结构
 
 ```
@@ -151,6 +161,7 @@ WeFinance/
 - GPT-4o结构化为JSON交易记录
 - 自动分类：餐饮、交通、购物、医疗、娱乐等
 - 生成月度/周度消费报告
+- OCR失败时支持手动粘贴JSON/CSV继续分析
 
 ### F2：对话式财务顾问
 - 自然语言问答："我这个月还能花多少？"
@@ -193,8 +204,9 @@ conda activate wefinance
 # 运行所有测试
 pytest tests/
 
-# 运行测试并查看覆盖率
-pytest tests/ --cov=modules --cov=services --cov-report=html
+# 运行测试并查看覆盖率（需要先安装 pytest-cov）
+pip install pytest-cov
+pytest --cov=modules --cov=services --cov-report=term-missing
 ```
 
 - `tests/test_integration.py` 覆盖上传→分析→对话→推荐等五个核心用户场景。
