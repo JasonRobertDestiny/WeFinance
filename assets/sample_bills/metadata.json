@@ -1,0 +1,14 @@
+{
+  "bill_dining.png": {
+    "lang": "zh",
+    "desc": "餐饮账单截图"
+  },
+  "bill_shopping.png": {
+    "lang": "zh",
+    "desc": "购物账单截图"
+  },
+  "bill_mixed.png": {
+    "lang": "zh",
+    "desc": "综合账单截图"
+  }
+}
