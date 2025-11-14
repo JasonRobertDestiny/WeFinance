@@ -236,10 +236,16 @@ def render() -> None:
             )
             st.plotly_chart(fig_month, use_container_width=True)
 
-    with st.expander(i18n.t("spending.insight_title"), expanded=False):
+    with st.expander(i18n.t("spending.insight_title"), expanded=True):
         if insights:
             for insight in insights:
-                st.success(f"**{insight.title}**：{insight.detail}")
+                st.markdown(f"### {insight.title}")
+                st.write(insight.detail)
+                if insight.actions:
+                    st.markdown("**💡 行动建议：**")
+                    for idx, action in enumerate(insight.actions, 1):
+                        st.markdown(f"{idx}. {action}")
+                st.markdown("---")
         else:
             st.info(i18n.t("spending.insight_none"))
 

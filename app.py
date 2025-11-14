@@ -80,11 +80,32 @@ st.set_page_config(
 
 
 def _render_home() -> None:
-    """Render the landing page with quick project hints."""
+    """Render the landing page with value proposition and card-based navigation."""
     i18n = get_i18n()
-    st.title(i18n.t("app.title"))
-    st.subheader(i18n.t("app.subtitle"))
 
+    # Purple gradient value proposition banner
+    st.markdown(
+        f"""
+        <div style="
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 2rem;
+            border-radius: 12px;
+            color: white;
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        ">
+            <h1 style="margin: 0; font-size: 2rem; font-weight: 700;">
+                {i18n.t("app.value_banner_title")}
+            </h1>
+            <p style="margin: 0.5rem 0 0 0; font-size: 1.1rem; opacity: 0.95;">
+                {i18n.t("app.value_banner_subtitle")}
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    # Anomaly warnings (prioritized above metrics)
     active_anomalies = session_utils.get_active_anomalies()
     anomaly_message = st.session_state.get("anomaly_message", "")
 
@@ -133,93 +154,105 @@ def _render_home() -> None:
     elif anomaly_message:
         st.info(anomaly_message)
 
-    # 定义4步理财流程 (4-step financial planning workflow)
-    steps = [
-        {
-            "id": "upload",
-            "name": i18n.t("app.step_upload_bills"),
-            "page_key": "bill_upload",
-            "hint": i18n.t("app.hint_upload_bills"),
-            "done": bool(session_utils.get_transactions()),
-            "icon": "📸"
-        },
-        {
-            "id": "insights",
-            "name": i18n.t("app.step_view_insights"),
-            "page_key": "spending_insights",
-            "hint": i18n.t("app.hint_view_insights"),
-            "done": bool(st.session_state.get("analysis_summary")),
-            "icon": "📊"
-        },
-        {
-            "id": "chat",
-            "name": i18n.t("app.step_chat_advisor"),
-            "page_key": "advisor_chat",
-            "hint": i18n.t("app.hint_chat_advisor"),
-            "done": len(st.session_state.get("chat_history", [])) > 0,
-            "icon": "💬"
-        },
-        {
-            "id": "invest",
-            "name": i18n.t("app.step_get_recommendations"),
-            "page_key": "investment_recs",
-            "hint": i18n.t("app.hint_get_recommendations"),
-            "done": bool(st.session_state.get("product_recommendations")),
-            "icon": "💰"
-        },
-    ]
+    # Calculate metrics
+    transactions = session_utils.get_transactions()
+    monthly_budget = session_utils.get_monthly_budget()
+    chat_history = st.session_state.get("chat_history", [])
 
-    # 渲染进度引导卡片 (Render progress guide cards)
-    st.markdown("---")
-    st.subheader(i18n.t("app.progress_guide_title"))
-    st.caption(i18n.t("app.progress_guide_subtitle"))
+    total_spent = sum(txn.amount for txn in transactions)
+    budget_remaining = monthly_budget - total_spent
 
-    for step in steps:
-        col1, col2, col3 = st.columns([0.08, 0.8, 0.12])
+    # 3-column metrics cards with direct navigation buttons
+    col1, col2, col3 = st.columns(3)
 
-        with col1:
-            # 完成状态图标 (Completion status icon)
-            if step["done"]:
-                st.markdown("✅")
-            else:
-                st.markdown("⭕")
-
-        with col2:
-            # 步骤名称和提示 (Step name and hint)
-            st.markdown(f"{step['icon']} **{step['name']}**")
-
-            if not step["done"]:
-                st.caption(step["hint"])
-
-        with col3:
-            # 只为第一个未完成步骤显示按钮 (Only show button for first incomplete step)
-            if not step["done"]:
-                button_key = f"goto_{step['id']}"
-                if st.button(i18n.t("app.btn_go"), key=button_key, type="primary"):
-                    # 设置选中页面（通过侧边栏导航机制）
-                    st.session_state["selected_page"] = step["page_key"]
-                    st.rerun()
-
-                # 只显示第一个未完成步骤的按钮 (Show only first incomplete button)
-                break
-
-    # 如果全部完成，显示鼓励信息 (Show celebration when all complete)
-    if all(step["done"] for step in steps):
-        st.success(i18n.t("app.all_steps_completed"))
-        st.balloons()  # 庆祝动画 (Celebration animation)
-
-    st.markdown(
-        "\n".join(
-            [
-                i18n.t("app.welcome"),
-                "",
-                i18n.t("app.feature_bill"),
-                i18n.t("app.feature_analysis"),
-                i18n.t("app.feature_chat"),
-                i18n.t("app.feature_recs"),
-            ]
+    with col1:
+        st.metric(
+            label=i18n.t("app.metric_transactions"),
+            value=i18n.t("app.metric_transactions_unit", count=len(transactions))
         )
+        if st.button(
+            i18n.t("app.btn_upload_bills"),
+            key="home_upload_btn",
+            type="primary",
+            use_container_width=True
+        ):
+            st.session_state["selected_page"] = "bill_upload"
+            st.rerun()
+
+    with col2:
+        st.metric(
+            label=i18n.t("app.metric_budget_remaining"),
+            value=f"¥{budget_remaining:,.0f}",
+            delta=i18n.t("app.metric_budget_spent", spent=total_spent)
+        )
+        if st.button(
+            i18n.t("app.btn_view_analysis"),
+            key="home_analysis_btn",
+            use_container_width=True
+        ):
+            st.session_state["selected_page"] = "spending_insights"
+            st.rerun()
+
+    with col3:
+        st.metric(
+            label=i18n.t("app.metric_chat_history"),
+            value=i18n.t("app.metric_chat_unit", count=len(chat_history))
+        )
+        if st.button(
+            i18n.t("app.btn_start_chat"),
+            key="home_chat_btn",
+            use_container_width=True
+        ):
+            st.session_state["selected_page"] = "advisor_chat"
+            st.rerun()
+
+    # Comparison table
+    st.markdown("---")
+    st.subheader(i18n.t("app.comparison_title"))
+
+    import pandas as pd
+    comparison_data = {
+        i18n.t("app.comparison_feature"): [
+            i18n.t("app.comparison_ocr_rate"),
+            i18n.t("app.comparison_processing"),
+            i18n.t("app.comparison_multilingual"),
+            i18n.t("app.comparison_ai_advisor"),
+        ],
+        i18n.t("app.comparison_wefinance"): [
+            i18n.t("app.comparison_ocr_wefinance"),
+            i18n.t("app.comparison_processing_wefinance"),
+            i18n.t("app.comparison_multilingual_wefinance"),
+            i18n.t("app.comparison_ai_wefinance"),
+        ],
+        i18n.t("app.comparison_traditional"): [
+            i18n.t("app.comparison_ocr_traditional"),
+            i18n.t("app.comparison_processing_traditional"),
+            i18n.t("app.comparison_multilingual_traditional"),
+            i18n.t("app.comparison_ai_traditional"),
+        ],
+    }
+    comparison_df = pd.DataFrame(comparison_data)
+    st.dataframe(
+        comparison_df,
+        use_container_width=True,
+        hide_index=True
     )
+
+    # Get recommendations button
+    st.markdown("---")
+    col_invest = st.columns([1, 2, 1])[1]
+    with col_invest:
+        if st.button(
+            i18n.t("app.btn_get_recommendations"),
+            key="home_invest_btn",
+            type="secondary",
+            use_container_width=True
+        ):
+            st.session_state["selected_page"] = "investment_recs"
+            st.rerun()
+
+    # Project info footer
+    st.markdown("---")
     st.info(i18n.t("app.info_note"))
 
 
@@ -304,7 +337,7 @@ def main() -> None:
         st.markdown(f"**{i18n.t('app.global_settings_title')}**")
 
         # 获取当前budget (Get current budget)
-        current_budget = st.session_state.get("monthly_budget", 5000.0)
+        current_budget = session_utils.get_monthly_budget()
 
         # Budget输入框 (Budget input)
         new_budget = st.number_input(
@@ -320,12 +353,13 @@ def main() -> None:
 
         # 更新session state (Update session state)
         if new_budget != current_budget:
-            st.session_state["monthly_budget"] = new_budget
+            session_utils.set_monthly_budget(new_budget)
             st.toast(i18n.t("app.budget_updated"))
 
         # 显示当前预算（带格式化）(Display current budget with formatting)
+        latest_budget = session_utils.get_monthly_budget()
         st.caption(
-            f"💰 {i18n.t('app.current_budget_display', budget=f'¥{new_budget:,.0f}')}"
+            f"💰 {i18n.t('app.current_budget_display', budget=f'¥{latest_budget:,.0f}')}"
         )
 
         st.markdown("---")

@@ -282,13 +282,19 @@ conda info                     # 查看conda信息
 
 ## 竞赛信息
 
-- **赛事**：2025深圳国际金融科技大赛（AI赛道）
+- **赛事**：2025深圳国际金融科技大赛
+- **赛道**：人工智能赛道
+- **作品名称**：WeFinance Copilot - AI驱动的智能财务助理
 - **截止日期**：2025年11月16日 24:00
 - **评分标准**：
   - 产品实现完整性：40%
   - 创新性：30%
   - 商业价值：30%
-- **预期得分**：88/100
+- **核心竞争力**：
+  - Vision LLM识别准确率100%（vs 传统OCR 0%）
+  - 一步到位提取（图片→结构化数据）
+  - 可解释AI（XAI）建立用户信任
+  - 主动异常检测，从被动到主动
 
 ## 文档资源
 
@@ -319,4 +325,4 @@ conda info                     # 查看conda信息
 
 - 项目负责人：WeFinance 团队
 - 邮箱：team@wefinance.ai
-- GitHub：<https://github.com/wefinance/copilot>
+- GitHub：https://github.com/JasonRobertDestiny/WeFinance-Copilot

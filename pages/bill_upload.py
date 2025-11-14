@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import io
 import json
 from datetime import date
@@ -17,6 +18,7 @@ from modules.analysis import generate_insights
 from services.ocr_service import MAX_FILE_SIZE_BYTES, OCRService
 from utils.error_handling import UserFacingError
 from utils.session import get_i18n, set_analysis_summary, set_transactions
+from utils.transactions import generate_transaction_id
 
 STRUCTURED_FILE_EXTENSIONS = {".csv", ".xlsx", ".xls"}
 MAX_FILE_SIZE_MB = MAX_FILE_SIZE_BYTES // (1024 * 1024)
@@ -64,6 +66,7 @@ def _parse_excel_file(file_bytes: bytes, i18n=None) -> List[Transaction]:
     }
 
     try:
+        file_hash = hashlib.sha256(file_bytes).hexdigest()
         # Read Excel file using pandas
         df = pd.read_excel(io.BytesIO(file_bytes))
 
@@ -102,7 +105,7 @@ def _parse_excel_file(file_bytes: bytes, i18n=None) -> List[Transaction]:
         df_renamed = df.rename(columns=column_map)
 
         transactions: List[Transaction] = []
-        for idx, row in df_renamed.iterrows():
+        for idx, row in enumerate(df_renamed.to_dict("records"), start=1):
             # Skip rows with empty date
             if pd.isna(row.get("date")) or not str(row.get("date", "")).strip():
                 continue
@@ -133,14 +136,24 @@ def _parse_excel_file(file_bytes: bytes, i18n=None) -> List[Transaction]:
             if amount <= 0:
                 continue
 
+            currency = str(row.get("currency", "CNY")).strip() or "CNY"
+            txn_id = generate_transaction_id(
+                merchant=merchant,
+                date_value=date_str,
+                amount=amount,
+                currency=currency,
+                source_hash=file_hash,
+                sequence=idx,
+            )
+
             transactions.append(
                 Transaction(
-                    id=str(row.get("id", "")).strip() or str(len(transactions) + 1),
+                    id=row.get("id", "").strip() or txn_id,
                     date=date_str,
                     merchant=merchant,
                     category=category,
                     amount=amount,
-                    currency=str(row.get("currency", "CNY")).strip() or "CNY",
+                    currency=currency,
                     payment_method=str(row.get("payment_method", "")).strip() or None,
                 )
             )
@@ -170,7 +183,25 @@ def _parse_manual_input(raw_text: str, i18n=None) -> List[Transaction]:
         data = json.loads(raw_text)
         if not isinstance(data, list):
             raise ValueError(i18n.t("bill_upload.manual_error_json_root"))
-        return [Transaction(**item) for item in data]
+
+        transactions: List[Transaction] = []
+        for idx, item in enumerate(data, start=1):
+            payload = dict(item)
+            merchant = str(payload.get("merchant", ""))
+            date_str = payload.get("date", "")
+            amount = float(payload.get("amount", 0))
+            currency = payload.get("currency", "CNY")
+            if not payload.get("id"):
+                payload["id"] = generate_transaction_id(
+                    merchant=merchant,
+                    date_value=date_str,
+                    amount=amount,
+                    currency=currency,
+                    source_hash="manual-json",
+                    sequence=idx,
+                )
+            transactions.append(Transaction(**payload))
+        return transactions
 
     # Otherwise assume CSV.
     csv_stream = io.StringIO(raw_text)
@@ -182,14 +213,24 @@ def _parse_manual_input(raw_text: str, i18n=None) -> List[Transaction]:
     for row in reader:
         if not row:
             continue
+        currency = row.get("currency", "CNY").strip() or "CNY"
+        txn_id = row.get("id", "").strip() or generate_transaction_id(
+            merchant=row.get("merchant", "").strip(),
+            date_value=row.get("date", "").strip(),
+            amount=float(row.get("amount", 0)),
+            currency=currency,
+            source_hash="manual-csv",
+            sequence=idx,
+        )
+
         transactions.append(
             Transaction(
-                id=row.get("id", "").strip() or str(len(transactions) + 1),
+                id=txn_id,
                 date=row.get("date", "").strip(),
                 merchant=row.get("merchant", "").strip(),
                 category=row.get("category", "").strip(),
                 amount=float(row.get("amount", 0)),
-                currency=row.get("currency", "CNY").strip() or "CNY",
+                currency=currency,
                 payment_method=row.get("payment_method") or None,
             )
         )
@@ -331,9 +372,18 @@ def _render_manual_entry(i18n) -> None:
                     )
                     return
 
+                txn_id = generate_transaction_id(
+                    merchant=merchant,
+                    date_value=date_val,
+                    amount=amount,
+                    currency="CNY",
+                    source_hash="manual-table",
+                    sequence=idx,
+                )
+
                 transactions.append(
                     Transaction(
-                        id=f"manual-table-{idx}",
+                        id=txn_id,
                         date=date_val,
                         merchant=merchant,
                         category=category,
@@ -447,16 +497,38 @@ def render() -> None:
                     file_text = f"Excel file: {filename}"
                 except Exception as excel_exc:
                     # If Excel parsing fails, try CSV
+                    excel_error = str(excel_exc)
                     try:
                         csv_text = file_bytes.decode("utf-8")
                         structured_transactions = _parse_manual_input(csv_text, i18n)
                         file_text = csv_text
                     except Exception as csv_exc:
-                        # Both failed, report the error
-                        parse_error = (
-                            f"Excel error: {str(excel_exc)[:100]}; "
-                            f"CSV error: {str(csv_exc)[:100]}"
-                        )
+                        # Both failed, provide user-friendly error message
+                        if "缺少" in excel_error or "missing" in excel_error.lower():
+                            parse_error = (
+                                f"Excel文件缺少必需的列。请确保包含：\n"
+                                f"• 日期列（posting_date / date / transaction_date）\n"
+                                f"• 商户列（merchant / name_customer / vendor）\n"
+                                f"• 金额列（amount / total_amount）\n"
+                                f"当前文件：{filename}"
+                            )
+                        elif "解析失败" in excel_error or "parse" in excel_error.lower():
+                            parse_error = (
+                                f"无法读取Excel文件格式。可能原因：\n"
+                                f"• 文件已损坏或格式不正确\n"
+                                f"• 文件被加密或受保护\n"
+                                f"建议：尝试另存为新的.xlsx文件后再上传\n"
+                                f"当前文件：{filename}"
+                            )
+                        else:
+                            parse_error = (
+                                f"文件导入失败。请检查：\n"
+                                f"• 文件是否为有效的Excel (.xlsx/.xls) 或CSV格式\n"
+                                f"• 文件内容是否包含有效的交易数据\n"
+                                f"• 日期、商户、金额等字段是否完整\n"
+                                f"当前文件：{filename}\n"
+                                f"详细错误：{excel_error[:80]}"
+                            )
 
                 if parse_error or not structured_transactions:
                     raise ValueError(
@@ -585,13 +657,42 @@ def render() -> None:
             st.info(f"💡 {err.suggestion}")
         st.markdown("---")
         st.markdown(f"**{i18n.t('bill_upload.fallback_option')}**")
-        if st.button(
-            i18n.t("bill_upload.manual_entry_btn"),
-            type="primary",
-            key="fallback_to_manual",
-        ):
-            st.session_state["show_manual_entry"] = True
+
+        # 3-option guidance for upload failure
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            st.markdown(f"### {i18n.t('bill_upload.fallback_option_1_title')}")
+            st.caption(i18n.t('bill_upload.fallback_option_1_desc'))
+            if st.button(
+                i18n.t('bill_upload.fallback_option_1_title'),
+                key="fallback_reupload",
+                use_container_width=True
+            ):
+                # Clear state and force re-render uploader
+                st.session_state["show_manual_entry"] = False
+                st.session_state.pop("uploaded_files_count", None)
+                st.rerun()
+
+        with col2:
+            st.markdown(f"### {i18n.t('bill_upload.fallback_option_2_title')}")
+            st.caption(i18n.t('bill_upload.fallback_option_2_desc'))
+            if st.button(
+                i18n.t('bill_upload.fallback_option_2_title'),
+                key="fallback_manual",
+                type="primary",
+                use_container_width=True
+            ):
+                st.session_state["show_manual_entry"] = True
+                st.rerun()
+
+        with col3:
+            st.markdown(f"### {i18n.t('bill_upload.fallback_option_3_title')}")
+            st.caption(i18n.t('bill_upload.fallback_option_3_desc'))
+            st.caption("📄 上传 .xlsx / .csv 文件")
+
         if st.session_state.get("show_manual_entry"):
+            st.markdown("---")
             _render_manual_entry(i18n)
         return
 

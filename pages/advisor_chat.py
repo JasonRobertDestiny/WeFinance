@@ -8,6 +8,7 @@ import streamlit as st
 
 from modules.chat_manager import ChatManager
 from utils.session import (
+    build_chat_cache_key,
     get_chat_history,
     get_i18n,
     get_monthly_budget,
@@ -49,11 +50,12 @@ def render() -> None:
         )
     )
 
+    locale = st.session_state.get("locale", "zh_CN")
     chat_manager = ChatManager(
         history=history,
         transactions=transactions,
         monthly_budget=current_budget,
-        locale=st.session_state.get("locale", "zh_CN"),
+        locale=locale,
     )
     chat_manager.update_transactions(transactions)
     chat_manager.set_monthly_budget(current_budget)
@@ -75,8 +77,14 @@ def render() -> None:
         st.write(user_prompt)
 
     cache: dict = st.session_state["chat_cache"]
-    if user_prompt in cache:
-        cached_reply = cache[user_prompt]
+    cache_key = build_chat_cache_key(
+        user_prompt,
+        transactions,
+        current_budget,
+        locale,
+    )
+    if cache_key in cache:
+        cached_reply = cache[cache_key]
         history.append({"role": "assistant", "content": cached_reply})
         history = set_chat_history(history)
         with st.chat_message("assistant"):
@@ -87,7 +95,7 @@ def render() -> None:
     with st.chat_message("assistant"):
         with st.spinner(i18n.t("common.loading_thinking")):
             response = chat_manager.generate_response(user_prompt)
-            cache[user_prompt] = response
+            cache[cache_key] = response
             if len(cache) > 20:
                 first_key = next(iter(cache))
                 cache.pop(first_key, None)

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 from copy import deepcopy
 from datetime import date
@@ -30,8 +32,10 @@ DEFAULT_STATE: Dict[str, Any] = {
     "anomaly_message": "",
     "locale": "zh_CN",
     "chat_cache": {},
+    "chat_cache_version": 0,
     "monthly_budget": 5000.0,
     "data_restored": False,
+    "selected_page": "home",  # 确保默认从首页开始
 }
 
 
@@ -83,6 +87,19 @@ def _persist_state(key: str, value: Any) -> None:
         logger.warning("Failed to persist %s: %s", key, exc)
 
 
+def _invalidate_chat_cache() -> None:
+    """重置聊天缓存并增加版本号，确保依赖数据变化后不会读旧值。"""
+
+    cache = st.session_state.get("chat_cache")
+    if isinstance(cache, dict):
+        cache.clear()
+    else:
+        st.session_state["chat_cache"] = {}
+    st.session_state["chat_cache_version"] = (
+        st.session_state.get("chat_cache_version", 0) + 1
+    )
+
+
 def get_transactions() -> List[Transaction]:
     """Return transactions stored in session as `Transaction` models."""
     return [
@@ -96,6 +113,7 @@ def set_transactions(transactions: Iterable[Transaction | dict]) -> None:
     serialized = [_serialize_transaction_entry(txn) for txn in transactions]
     st.session_state["transactions"] = serialized
     _persist_state("transactions", serialized)
+    _invalidate_chat_cache()
 
 
 def get_trusted_merchants() -> List[str]:
@@ -223,6 +241,7 @@ def set_monthly_budget(amount: float) -> None:
     normalized = max(0.0, float(amount))
     st.session_state["monthly_budget"] = normalized
     _persist_state("monthly_budget", normalized)
+    _invalidate_chat_cache()
 
 
 def get_chat_history() -> List[Dict[str, Any]]:
@@ -251,3 +270,23 @@ def set_product_recommendations(items: Iterable[Dict[str, Any]]) -> None:
     recommendations = [dict(item) for item in items]
     st.session_state["product_recommendations"] = recommendations
     _persist_state("product_recommendations", recommendations)
+
+
+def build_chat_cache_key(
+    prompt: str,
+    transactions: Iterable[Transaction | dict],
+    budget: float,
+    locale: str,
+) -> str:
+    """基于提示词+账本+预算生成缓存键，避免跨数据复用。"""
+
+    entries = [_serialize_transaction_entry(txn) for txn in transactions]
+    entries.sort(key=lambda item: item.get("id", ""))
+    payload = {
+        "prompt": prompt.strip(),
+        "budget": round(float(budget), 2),
+        "locale": locale,
+        "transactions": entries,
+    }
+    raw = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()

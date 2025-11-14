@@ -3,15 +3,20 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import logging
 import os
+import re
+from datetime import date
 from typing import List, Optional
 
+from dateutil import parser as date_parser
 from openai import OpenAI
 
-from models.entities import Transaction
+from models.entities import LineItem, Transaction
 from utils.error_handling import safe_call
+from utils.transactions import generate_transaction_id
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +29,141 @@ def _t(key: str, fallback: str) -> str:
         return get_i18n().t(key)
     except Exception:  # pylint: disable=broad-except
         return fallback
+
+
+TYPO_FIELD_MAP = {
+    "amout": "amount",
+    "marchant": "merchant",
+    "catagory": "category",
+}
+
+
+def _strip_markdown_fences(content: str) -> str:
+    cleaned = content.strip()
+    if cleaned.startswith("```json"):
+        cleaned = cleaned[7:]
+    if cleaned.startswith("```"):
+        cleaned = cleaned[3:]
+    if cleaned.endswith("```"):
+        cleaned = cleaned[:-3]
+    return cleaned.strip()
+
+
+def _try_json_load(payload: str) -> List[dict] | None:
+    if not payload:
+        return None
+    try:
+        data = json.loads(payload)
+    except json.JSONDecodeError:
+        return None
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict):
+        if "transactions" in data and isinstance(data["transactions"], list):
+            return data["transactions"]
+        return [data]
+    return None
+
+
+def _robust_json_parse(content: str) -> List[dict]:
+    """Robust JSON parsing with multiple fallback strategies."""
+
+    text = _strip_markdown_fences(content or "")
+    direct = _try_json_load(text)
+    if direct is not None:
+        return [
+            _apply_typo_fix(dict(entry)) for entry in direct  # type: ignore[arg-type]
+        ]
+
+    array_match = re.search(r"\[\s*\{.*\}\s*\]", text, re.DOTALL)
+    if array_match:
+        parsed = _try_json_load(array_match.group(0))
+        if parsed is not None:
+            return [_apply_typo_fix(dict(entry)) for entry in parsed]
+
+    object_matches = re.findall(r"\{[^{}]+\}", text)
+    if len(object_matches) > 1:
+        joined = "[" + ",".join(object_matches) + "]"
+        parsed = _try_json_load(joined)
+        if parsed is not None:
+            return [_apply_typo_fix(dict(entry)) for entry in parsed]
+
+    typo_fixed = text
+    for typo, correct in TYPO_FIELD_MAP.items():
+        typo_fixed = typo_fixed.replace(f'"{typo}"', f'"{correct}"')
+        typo_fixed = typo_fixed.replace(typo, correct)
+    fallback = _try_json_load(typo_fixed)
+    if fallback is not None:
+        return [_apply_typo_fix(dict(entry)) for entry in fallback]
+
+    logger.error("JSON解析失败，返回空数组。原始片段：%s", text[:200])
+    return []
+
+
+def _apply_typo_fix(entry: dict) -> dict:
+    for typo, correct in TYPO_FIELD_MAP.items():
+        if typo in entry and correct not in entry:
+            entry[correct] = entry.pop(typo)
+    return entry
+
+
+def _validate_and_fix_transaction(
+    item: dict,
+    idx: int,
+    source_hash: str,
+) -> Transaction | None:
+    """Validate transaction fields and attempt auto-fix."""
+
+    payload = dict(item)
+    for typo, correct in TYPO_FIELD_MAP.items():
+        if typo in payload and correct not in payload:
+            payload[correct] = payload.pop(typo)
+
+    if "amount" not in payload:
+        logger.warning("Transaction %s missing amount field", idx)
+        return None
+
+    if not payload.get("merchant"):
+        payload["merchant"] = "Unknown Merchant"
+
+    raw_date = payload.get("date")
+    if raw_date:
+        try:
+            parsed_date = date_parser.parse(str(raw_date))
+            payload["date"] = parsed_date.strftime("%Y-%m-%d")
+        except (ValueError, TypeError):
+            payload["date"] = date.today().isoformat()
+    else:
+        payload["date"] = date.today().isoformat()
+
+    if "currency" not in payload:
+        payload["currency"] = "CNY"
+
+    line_items_data = payload.get("line_items", []) or []
+    payload["line_items"] = [LineItem(**entry) for entry in line_items_data]
+
+    receipt_time = payload.get("receipt_time")
+    if isinstance(receipt_time, str):
+        try:
+            payload["receipt_time"] = date_parser.parse(receipt_time).isoformat()
+        except (ValueError, TypeError):
+            payload.pop("receipt_time", None)
+
+    if not payload.get("id"):
+        payload["id"] = generate_transaction_id(
+            merchant=payload.get("merchant", ""),
+            date_value=payload.get("date", ""),
+            amount=float(payload.get("amount", 0)),
+            currency=payload.get("currency", "CNY"),
+            source_hash=source_hash,
+            sequence=idx,
+        )
+
+    try:
+        return Transaction(**payload)
+    except Exception as exc:  # pylint: disable=broad-except
+        logger.warning("Failed to convert transaction %s: %s", idx, exc)
+        return None
 
 
 class VisionOCRService:
@@ -72,23 +212,47 @@ class VisionOCRService:
         try:
             # 将图片编码为base64
             base64_image = base64.b64encode(image_bytes).decode("utf-8")
+            source_hash = hashlib.sha256(image_bytes).hexdigest()
 
-            # 构造提示词
+            # 构造提示词（增强多语言支持和字段容错）
             prompt = """你是一个专业的财务账单识别助手。请仔细分析这张账单图片，提取所有交易记录。
 
-要求：
-1. 识别账单中的每一笔交易
-2. 提取以下字段：
-   - date: 日期（YYYY-MM-DD格式）
-   - merchant: 商户名称（保持原文，不翻译）
-   - category: 分类（从以下选择：餐饮、交通、购物、娱乐、医疗、教育、其他）
-   - amount: 总金额（数字，不带货币符号）
-   - currency: 货币代码（识别收据上的货币符号：RM→MYR, ¥→CNY, $→USD, S$→SGD, 无符号默认CNY）
-3. 如果是详细收据（有商品明细），提取：
-   - line_items: 商品明细数组（每项包含 description, quantity, unit_price, amount）
-   - subtotal: 小计（折扣前金额）
+多语言处理规则：
+1. **语言识别**：
+   - 如果账单为韩文/日文/泰文等非中英文：
+     * 商户名保留原文（不要翻译）
+     * 金额(amount)和分类(category)必须提取
+     * 如果有英文字段，优先使用英文值
+   - 如果账单为中文/英文：正常提取所有字段
+
+2. **字段容错策略**（重要！）：
+   - date缺失 → 尝试从receipt_time推断，或设为null（但标记partial_data=true）
+   - merchant缺失 → 从票据抬头/店铺名提取，找不到则设为"Unknown Merchant"
+   - category缺失 → 根据商品明细智能推断（食品→餐饮，服装→购物，交通卡→交通）
+   - **即使部分字段缺失，也要返回数据，不要直接返回空数组[]**
+
+3. **货币识别增强**：
+   - RM 或 MYR → "MYR"（马来西亚林吉特）
+   - ฿ 或 THB → "THB"（泰铢）
+   - ₩ 或 KRW → "KRW"（韩元）
+   - ¥ → "CNY"（人民币）
+   - $ → "USD"（美元，但S$为SGD新加坡元）
+   - 无符号且无法判断 → 默认"CNY"
+
+4. **提取字段**：
+   - date: 日期（YYYY-MM-DD格式）或 null
+   - merchant: 商户名称（保持原文）或 "Unknown Merchant"
+   - category: 分类（餐饮、交通、购物、娱乐、医疗、教育、其他）
+   - amount: 总金额（数字，不带货币符号，必需）
+   - currency: 货币代码（见上述规则）
+   - partial_data: 布尔值（如果有字段被推断，设为true）
+   - inferred_fields: 数组（列出哪些字段是推断的，如 ["date", "merchant"]）
+
+5. **详细收据字段**（可选）：
+   - line_items: 商品明细数组
+   - subtotal: 小计
    - total_discount: 总折扣金额
-   - receipt_number: 收据编号（如 Document No, Receipt No, Cash Bill）
+   - receipt_number: 收据编号
 
 返回格式（纯JSON数组，不要markdown代码块）：
 [
@@ -97,7 +261,22 @@ class VisionOCRService:
     "merchant": "星巴克",
     "category": "餐饮",
     "amount": 45.0,
-    "currency": "CNY"
+    "currency": "CNY",
+    "partial_data": false,
+    "inferred_fields": []
+  }
+]
+
+部分字段缺失示例（韩文账单）：
+[
+  {
+    "date": null,
+    "merchant": "스타벅스",
+    "category": "餐饮",
+    "amount": 9000.0,
+    "currency": "KRW",
+    "partial_data": true,
+    "inferred_fields": ["date"]
   }
 ]
 
@@ -117,11 +296,15 @@ class VisionOCRService:
         "amount": 9.0
       }
     ],
-    "receipt_number": "TD01167104"
+    "receipt_number": "TD01167104",
+    "partial_data": false,
+    "inferred_fields": []
   }
 ]
 
-如果无法识别到交易记录，返回空数组：[]"""
+如果完全无法识别到交易记录（图片质量极差或不是账单），返回空数组：[]
+
+重要：即使部分字段缺失，也要尝试返回部分数据，并标记inferred_fields。"""
 
             # 调用视觉模型
             response = self.client.chat.completions.create(
@@ -140,62 +323,22 @@ class VisionOCRService:
                         ],
                     }
                 ],
+                response_format={"type": "json_object"},
                 max_tokens=2000,
                 temperature=0.0,  # 确定性输出
             )
 
             # 解析响应
             content = response.choices[0].message.content
-            logger.debug(f"视觉模型原始响应: {content}")
+            logger.debug("视觉模型原始响应: %s", content)
 
-            # 清理响应（移除可能的markdown代码块）
-            content = content.strip()
-            if content.startswith("```json"):
-                content = content[7:]
-            if content.startswith("```"):
-                content = content[3:]
-            if content.endswith("```"):
-                content = content[:-3]
-            content = content.strip()
+            transactions_data = _robust_json_parse(content)
 
-            # 解析JSON
-            transactions_data = json.loads(content)
-
-            # 转换为Transaction对象
-            transactions = []
+            transactions: List[Transaction] = []
             for idx, item in enumerate(transactions_data):
-                try:
-                    # 处理商品明细（如果有）
-                    line_items_data = item.get("line_items", [])
-                    from models.entities import LineItem
-                    line_items = [
-                        LineItem(**li) for li in line_items_data
-                    ] if line_items_data else []
-
-                    # 处理收据时间（如果有）
-                    receipt_time = None
-                    if "receipt_time" in item:
-                        from datetime import datetime
-                        receipt_time = datetime.fromisoformat(item["receipt_time"])
-
-                    txn = Transaction(
-                        id=str(idx + 1),
-                        date=item["date"],
-                        merchant=item["merchant"],
-                        category=item["category"],
-                        amount=float(item["amount"]),
-                        currency=item.get("currency", "CNY"),  # 默认人民币
-                        line_items=line_items,
-                        subtotal=item.get("subtotal"),
-                        total_discount=item.get("total_discount"),
-                        tax=item.get("tax"),
-                        receipt_number=item.get("receipt_number"),
-                        receipt_time=receipt_time,
-                    )
+                txn = _validate_and_fix_transaction(item, idx, source_hash)
+                if txn:
                     transactions.append(txn)
-                except (KeyError, ValueError) as e:
-                    logger.warning(f"跳过无效交易记录: {item}, 错误: {e}")
-                    continue
 
             logger.info(f"成功从图片中提取 {len(transactions)} 条交易记录")
             return transactions

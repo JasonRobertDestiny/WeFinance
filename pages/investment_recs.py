@@ -10,6 +10,7 @@ import streamlit as st
 
 from models.entities import Recommendation, Transaction
 from services.recommendation_service import RecommendationService
+from utils import session as session_utils
 from utils.session import get_i18n, set_product_recommendations
 
 RISK_QUESTIONS: List[Dict[str, object]] = [
@@ -43,16 +44,6 @@ RISK_QUESTIONS: List[Dict[str, object]] = [
 ]
 
 
-def _coerce_transactions(transactions_raw: Iterable[object]) -> List[Transaction]:
-    normalized: List[Transaction] = []
-    for entry in transactions_raw:
-        if isinstance(entry, Transaction):
-            normalized.append(entry)
-        elif isinstance(entry, dict):
-            normalized.append(Transaction(**entry))
-    return normalized
-
-
 @st.cache_data(show_spinner=False)
 def _generate_cached_recommendation(
     transactions_dump: Tuple[Tuple[Tuple[str, object], ...], ...],
@@ -64,12 +55,21 @@ def _generate_cached_recommendation(
     service = RecommendationService()
     transactions = [Transaction(**dict(entry)) for entry in transactions_dump]
     responses = dict(responses_tuple)
-    return service.generate(
+    result = service.generate(
         transactions=transactions,
         responses=responses,
         investment_goal=goal,
         locale=locale,
     )
+    recs = result.get("recommendations", [])
+    serialized = []
+    for rec in recs:
+        if isinstance(rec, Recommendation):
+            serialized.append(rec.model_dump())
+        elif isinstance(rec, dict):
+            serialized.append(rec)
+    result["recommendations"] = serialized
+    return result
 
 
 def _collect_risk_answers() -> Tuple[Dict[str, int], str]:
@@ -120,59 +120,64 @@ def _collect_risk_answers() -> Tuple[Dict[str, int], str]:
     return answers, goal
 
 
-def _render_allocation_chart(allocation: Dict[str, float]) -> None:
-    i18n = get_i18n()
-    asset_col = i18n.t("recommendation.label_asset")
-    ratio_col = i18n.t("recommendation.label_ratio")
-    allocation_df = pd.DataFrame(
-        {
-            asset_col: list(allocation.keys()),
-            ratio_col: [value * 100 for value in allocation.values()],
-        }
-    )
-    fig = px.pie(
-        allocation_df,
-        names=asset_col,
-        values=ratio_col,
-        hole=0.35,
-    )
-    fig.update_traces(textposition="inside", textinfo="percent+label")
-    st.plotly_chart(fig, use_container_width=True)
-
-
 def _render_results(results: Dict[str, object]) -> None:
     i18n = get_i18n()
-    recommendation: Recommendation = results["recommendation"]  # type: ignore[assignment]
-    explanation: str = results["explanation"]  # type: ignore[assignment]
-    metrics: Dict[str, float] = results["metrics"]  # type: ignore[assignment]
-    allocation: Dict[str, float] = results["allocation"]  # type: ignore[assignment]
-    risk_level: str = results["risk_level"]  # type: ignore[assignment]
+    recommendations_raw = results.get("recommendations", [])
+    recommendations = [
+        rec
+        if isinstance(rec, Recommendation)
+        else Recommendation(**rec)
+        for rec in recommendations_raw
+    ]
+    profile: Dict[str, object] = results.get("financial_profile", {})  # type: ignore[assignment]
+    risk_level: str = results.get("risk_level", "")  # type: ignore[assignment]
 
     st.success(i18n.t("recommendation.risk_result", risk=risk_level))
-    st.markdown(
-        i18n.t("recommendation.core_suggestion", summary=recommendation.summary)
-    )
 
-    st.subheader(i18n.t("recommendation.allocation_title"))
-    _render_allocation_chart(allocation)
-
-    st.subheader(i18n.t("recommendation.metrics_title"))
-    col1, col2 = st.columns(2)
+    st.subheader(i18n.t("recommendation.financial_profile_title"))
+    col1, col2, col3 = st.columns(3)
+    monthly_avg = float(profile.get("monthly_average", 0.0) or 0.0)
+    volatility = float(profile.get("spending_volatility", 0.0) or 0.0)
+    investable = float(profile.get("investable_amount", 0.0) or 0.0)
     with col1:
         st.metric(
-            i18n.t("recommendation.metric_return"), f"{metrics['expected_return']:.1f}%"
+            i18n.t("recommendation.metric_monthly_avg"), f"¥{monthly_avg:,.0f}"
         )
     with col2:
         st.metric(
-            i18n.t("recommendation.metric_drawdown"), f"{metrics['max_drawdown']:.1f}%"
+            i18n.t("recommendation.metric_investable"), f"¥{investable:,.0f}"
+        )
+    with col3:
+        st.metric(
+            i18n.t("recommendation.metric_volatility"), f"{volatility*100:.1f}%"
         )
 
-    st.subheader(i18n.t("recommendation.steps_title"))
-    for idx, step in enumerate(recommendation.rationale_steps, start=1):
-        st.write(f"{idx}. {step}")
+    breakdown: Dict[str, float] = profile.get("category_breakdown", {})  # type: ignore[assignment]
+    if breakdown:
+        st.subheader(i18n.t("recommendation.category_breakdown_title"))
+        df = pd.DataFrame(
+            [{"category": cat, "share": share * 100} for cat, share in breakdown.items()]
+        )
+        fig = px.bar(
+            df,
+            x="category",
+            y="share",
+            text="share",
+            labels={
+                "category": i18n.t("spending.label_category"),
+                "share": i18n.t("recommendation.label_ratio"),
+            },
+        )
+        fig.update_traces(texttemplate="%{text:.1f}%", textposition="outside")
+        fig.update_layout(yaxis_title=i18n.t("recommendation.label_ratio"))
+        st.plotly_chart(fig, use_container_width=True)
 
-    with st.expander(i18n.t("recommendation.xai_title"), expanded=False):
-        st.markdown(explanation.replace("\n", "  \n"))
+    st.subheader(i18n.t("recommendation.recommendation_list_title"))
+    for rec in recommendations:
+        st.markdown(f"### {rec.title}")
+        st.write(rec.summary)
+        for idx, step in enumerate(rec.rationale_steps, start=1):
+            st.write(f"{idx}. {step}")
 
 
 def render() -> None:
@@ -181,8 +186,10 @@ def render() -> None:
     st.title(i18n.t("recommendation.title"))
     st.write(i18n.t("recommendation.subtitle"))
 
-    transactions_raw = st.session_state.get("transactions", [])
-    transactions = _coerce_transactions(transactions_raw)
+    transactions = session_utils.get_transactions()
+    if not transactions:
+        st.warning(i18n.t("recommendation.require_upload"))
+        return
 
     answers, goal = _collect_risk_answers()
     responses_tuple = tuple(sorted(answers.items()))
@@ -207,9 +214,7 @@ def render() -> None:
 
         _render_results(results)
         # Persist to session for downstream usage or export.
-        recommendation_payload = [
-            results["recommendation"].model_dump()  # type: ignore[attr-defined]
-        ]
+        recommendation_payload = [dict(item) for item in results["recommendations"]]
         set_product_recommendations(recommendation_payload)
         st.session_state["recommendation_explanation"] = results
     else:

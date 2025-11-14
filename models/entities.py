@@ -61,6 +61,10 @@ class SpendingInsight(BaseModel):
 
     title: str
     detail: str
+    actions: List[str] = Field(
+        default_factory=list,
+        description="Actionable recommendations with quantified benefits."
+    )
     delta: Optional[float] = Field(
         default=None, description="Month-over-month delta expressed as a percentage."
     )
