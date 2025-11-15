@@ -217,6 +217,11 @@ class VisionOCRService:
             # 构造提示词（增强多语言支持和字段容错）
             prompt = """你是一个专业的财务账单识别助手。请仔细分析这张账单图片，提取所有交易记录。
 
+【核心识别规则】：
+★ 首先统计图片中有多少笔交易（有几行独立金额就有几笔交易）
+★ 然后逐行提取每一笔的详细信息，确保 transactions 数组长度 = transaction_count
+★ 如看到合计行，仅用于验证总额，不作为单独交易计数
+
 多语言处理规则：
 1. **语言识别**：
    - 如果账单为韩文/日文/泰文等非中英文：
@@ -225,7 +230,7 @@ class VisionOCRService:
      * 如果有英文字段，优先使用英文值
    - 如果账单为中文/英文：正常提取所有字段
 
-2. **字段容错策略**（重要！）：
+2. **字段容错策略**：
    - date缺失 → 尝试从receipt_time推断，或设为null（但标记partial_data=true）
    - merchant缺失 → 从票据抬头/店铺名提取，找不到则设为"Unknown Merchant"
    - category缺失 → 根据商品明细智能推断（食品→餐饮，服装→购物，交通卡→交通）
@@ -254,36 +259,44 @@ class VisionOCRService:
    - total_discount: 总折扣金额
    - receipt_number: 收据编号
 
-返回格式（纯JSON数组，不要markdown代码块）：
-[
-  {
-    "date": "2025-11-01",
-    "merchant": "星巴克",
+返回格式（纯JSON对象，不要markdown代码块）：
+{
+  "transaction_count": 4,  // 图片中的交易总数（必填）
+  "transactions": [        // 交易详细列表（长度必须等于transaction_count）
+    {
+      "date": "2025-11-01",
+      "merchant": "星巴克",
     "category": "餐饮",
     "amount": 45.0,
     "currency": "CNY",
     "partial_data": false,
     "inferred_fields": []
-  }
-]
+    }
+  ]
+}
 
 部分字段缺失示例（韩文账单）：
-[
-  {
-    "date": null,
-    "merchant": "스타벅스",
+{
+  "transaction_count": 1,
+  "transactions": [
+    {
+      "date": null,
+      "merchant": "스타벅스",
     "category": "餐饮",
     "amount": 9000.0,
     "currency": "KRW",
     "partial_data": true,
     "inferred_fields": ["date"]
-  }
-]
+    }
+  ]
+}
 
 详细收据示例：
-[
-  {
-    "date": "2018-12-25",
+{
+  "transaction_count": 1,
+  "transactions": [
+    {
+      "date": "2018-12-25",
     "merchant": "BOOK TA.K (TAMAN DAYA) SDN BHD",
     "category": "购物",
     "amount": 9.0,
@@ -299,10 +312,11 @@ class VisionOCRService:
     "receipt_number": "TD01167104",
     "partial_data": false,
     "inferred_fields": []
-  }
-]
+    }
+  ]
+}
 
-如果完全无法识别到交易记录（图片质量极差或不是账单），返回空数组：[]
+如果图片中没有交易记录，返回：{"transaction_count": 0, "transactions": []}
 
 重要：即使部分字段缺失，也要尝试返回部分数据，并标记inferred_fields。"""
 
@@ -324,15 +338,30 @@ class VisionOCRService:
                     }
                 ],
                 response_format={"type": "json_object"},
-                max_tokens=2000,
-                temperature=0.0,  # 确定性输出
+                max_tokens=3000,
+                temperature=0.0,  # 确定性输出，新数据结构已解决多行识别问题
             )
 
             # 解析响应
             content = response.choices[0].message.content
             logger.debug("视觉模型原始响应: %s", content)
 
-            transactions_data = _robust_json_parse(content)
+            response_data = _robust_json_parse(content)
+
+            # 新格式：{transaction_count, transactions}
+            if isinstance(response_data, dict) and "transactions" in response_data:
+                transaction_count = response_data.get("transaction_count", 0)
+                transactions_data = response_data.get("transactions", [])
+                logger.info(
+                    f"LLM声明识别到 {transaction_count} 条交易，实际返回 {len(transactions_data)} 条"
+                )
+            # 兼容旧格式：直接返回数组
+            elif isinstance(response_data, list):
+                transactions_data = response_data
+                logger.warning("LLM返回旧格式数组，未提供transaction_count")
+            else:
+                logger.error(f"无法识别的响应格式: {type(response_data)}")
+                transactions_data = []
 
             transactions: List[Transaction] = []
             for idx, item in enumerate(transactions_data):

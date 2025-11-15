@@ -17,8 +17,9 @@ from models.entities import OCRParseResult, Transaction
 from modules.analysis import generate_insights
 from services.ocr_service import MAX_FILE_SIZE_BYTES, OCRService
 from utils.error_handling import UserFacingError
-from utils.session import get_i18n, set_analysis_summary, set_transactions
+from utils.session import get_i18n, get_transactions, set_analysis_summary, set_transactions
 from utils.transactions import generate_transaction_id
+from utils.ui_components import render_financial_health_card
 
 STRUCTURED_FILE_EXTENSIONS = {".csv", ".xlsx", ".xls"}
 MAX_FILE_SIZE_MB = MAX_FILE_SIZE_BYTES // (1024 * 1024)
@@ -438,6 +439,11 @@ def render() -> None:
     st.title(i18n.t("bill_upload.title"))
     st.write(i18n.t("bill_upload.subtitle"))
 
+    # 显示财务健康卡片（整合预算与支出）
+    transactions = get_transactions()
+    if transactions:
+        render_financial_health_card(transactions)
+
     uploaded_files = st.file_uploader(
         i18n.t("bill_upload.uploader_help", size=MAX_FILE_SIZE_MB),
         type=["png", "jpg", "jpeg", "pdf", "csv", "xlsx", "xls"],
@@ -724,7 +730,10 @@ def render() -> None:
                     transactions.append(Transaction(**item))
 
     if transactions:
-        set_transactions(transactions)
+        # 追加到现有交易列表，而不是覆盖
+        existing_transactions = get_transactions()
+        all_transactions = list(existing_transactions) + list(transactions)
+        set_transactions(all_transactions)
         st.session_state["ocr_raw_text"] = "\n\n".join(raw_texts)
         st.session_state["ocr_results"] = serialized_results
         st.session_state["uploaded_files_count"] = len(serialized_results)

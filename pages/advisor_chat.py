@@ -6,14 +6,17 @@ from typing import List
 
 import streamlit as st
 
+from models.entities import Transaction
 from modules.chat_manager import ChatManager
 from utils.session import (
     build_chat_cache_key,
     get_chat_history,
     get_i18n,
     get_monthly_budget,
+    get_transactions,
     set_chat_history,
 )
+from utils.ui_components import render_financial_health_card
 
 
 def _init_session_defaults() -> None:
@@ -29,26 +32,54 @@ def render() -> None:
 
     _init_session_defaults()
     history: List[dict] = get_chat_history()
+    transactions_list = get_transactions()
     transactions = st.session_state.get("transactions", [])
 
     current_budget = get_monthly_budget()
 
-    # 显示当前使用的budget（提示可在侧边栏修改）
-    # Display current budget (hint: can be changed in sidebar)
-    st.info(f"💰 {i18n.t('chat.current_budget_info', budget=f'¥{current_budget:,.0f}')}")
+    # 显示财务健康卡片（整合预算与支出）
+    if transactions_list:
+        render_financial_health_card(transactions_list)
 
-    # 示例问题（现在占全宽）(Sample questions - now full width)
-    st.markdown(
-        "\n".join(
-            [
-                f"**{i18n.t('chat.sample_title')}**",
-                f"- {i18n.t('chat.sample_q1')}",
-                f"- {i18n.t('chat.sample_q2')}",
-                f"- {i18n.t('chat.sample_q3')}",
-                f"- {i18n.t('chat.sample_q4')}",
-            ]
-        )
-    )
+    # 智能示例问题（根据数据动态生成，可点击）
+    if transactions_list:
+        # 分析消费数据生成个性化示例问题
+        categories = {}
+        for txn in transactions_list:
+            cat = txn.category if hasattr(txn, "category") else "其他"
+            amount = txn.amount if hasattr(txn, "amount") else 0
+            categories[cat] = categories.get(cat, 0) + amount
+
+        top_category = max(categories.items(), key=lambda x: x[1])[0] if categories else "餐饮"
+        total_spent = sum(txn.amount if hasattr(txn, "amount") else 0 for txn in transactions_list)
+        remaining = current_budget - total_spent
+
+        # 根据实际数据生成4个示例问题
+        sample_questions = [
+            f"我这个月{top_category}花了多少？",
+            f"还剩{remaining:.0f}元预算，怎么合理安排？",
+            f"我的{top_category}消费算高吗？如何优化？",
+            "给我一个适合我的理财建议",
+        ]
+    else:
+        # 无数据时显示通用问题
+        sample_questions = [
+            i18n.t("chat.sample_q1"),
+            i18n.t("chat.sample_q2"),
+            i18n.t("chat.sample_q3"),
+            i18n.t("chat.sample_q4"),
+        ]
+
+    # 显示为可点击的按钮组
+    st.markdown(f"**{i18n.t('chat.sample_title')}**")
+    cols = st.columns(2)
+    for idx, question in enumerate(sample_questions):
+        with cols[idx % 2]:
+            if st.button(question, key=f"sample_q_{idx}", use_container_width=True):
+                # 点击后自动发送该问题
+                st.session_state["auto_query"] = question
+                st.rerun()
+
 
     locale = st.session_state.get("locale", "zh_CN")
     chat_manager = ChatManager(
@@ -68,6 +99,12 @@ def render() -> None:
         st.info(i18n.t("chat.empty_history"))
 
     user_prompt = st.chat_input(i18n.t("chat.input_placeholder"))
+
+    # 处理自动查询（来自示例问题点击）
+    auto_query = st.session_state.pop("auto_query", None)
+    if auto_query:
+        user_prompt = auto_query
+
     if not user_prompt:
         return
 

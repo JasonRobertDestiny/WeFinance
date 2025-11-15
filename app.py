@@ -290,16 +290,14 @@ def main() -> None:
     i18n = get_i18n()
 
     with st.sidebar:
-        st.header(i18n.t("app.sidebar_header"))
+        st.header("WeFinance Copilot")
 
-        locale_labels = {
-            "zh_CN": i18n.t("app.locale_zh"),
-            "en_US": i18n.t("app.locale_en"),
-        }
+        # 语言切换（紧凑）
+        locale_labels = {"zh_CN": "中文", "en_US": "English"}
         current_locale = st.session_state.get("locale", "zh_CN")
         locale_display = locale_labels.get(current_locale, "中文")
         selected_display = st.selectbox(
-            i18n.t("app.language_label"),
+            "🌐 Language" if current_locale == "en_US" else "🌐 语言",
             options=list(locale_labels.values()),
             index=list(locale_labels.values()).index(locale_display),
         )
@@ -310,67 +308,96 @@ def main() -> None:
             switch_locale(selected_locale)
             st.rerun()
 
+        # ============ 智能导航引导 (紧凑版) ============
+        st.markdown("---")
+        transactions = session_utils.get_transactions()
+        has_transactions = len(transactions) > 0
+        has_chat_history = len(st.session_state.get("chat_history", [])) > 0
+        has_analysis = len(st.session_state.get("analysis_summary", [])) > 0
+        has_recommendations = len(st.session_state.get("product_recommendations", [])) > 0
+
+        steps_completed = sum([has_transactions, has_analysis, has_chat_history, has_recommendations])
+        total_steps = 4
+        progress_percentage = steps_completed / total_steps
+
+        # 紧凑进度显示
+        st.markdown(f"**{'📍 进度' if current_locale == 'zh_CN' else '📍 Progress'}** {steps_completed}/{total_steps}")
+        st.progress(progress_percentage)
+
+        # 智能建议下一步（精简）
+        if not has_transactions:
+            next_step = "👉 上传账单" if current_locale == "zh_CN" else "👉 Upload bills"
+            next_page_key = "bill_upload"
+        elif not has_analysis:
+            next_step = "👉 查看分析" if current_locale == "zh_CN" else "👉 View insights"
+            next_page_key = "spending_insights"
+        elif not has_chat_history:
+            next_step = "👉 AI咨询" if current_locale == "zh_CN" else "👉 Chat with AI"
+            next_page_key = "advisor_chat"
+        elif not has_recommendations:
+            next_step = "👉 投资建议" if current_locale == "zh_CN" else "👉 Invest advice"
+            next_page_key = "investment_recs"
+        else:
+            next_step = "✅ 已完成" if current_locale == "zh_CN" else "✅ All done"
+            next_page_key = None
+
+        if next_page_key and st.button(
+            next_step,
+            key="smart_nav_button",
+            use_container_width=True,
+            type="primary",
+        ):
+            st.session_state["selected_page"] = next_page_key
+            st.rerun()
+
+        st.markdown("---")
+
+        # 精简导航（移除首页，只保留4个核心步骤）
         nav_labels = {
-            "home": i18n.t("navigation.home"),
-            "bill_upload": i18n.t("navigation.bill_upload"),
-            "spending_insights": i18n.t("navigation.spending_insights"),
-            "advisor_chat": i18n.t("navigation.advisor_chat"),
-            "investment_recs": i18n.t("navigation.investment_recs"),
+            "bill_upload": f"{'✅' if has_transactions else '1️⃣'} " + ("账单上传" if current_locale == "zh_CN" else "Upload"),
+            "spending_insights": f"{'✅' if has_analysis else '2️⃣'} " + ("消费分析" if current_locale == "zh_CN" else "Analysis"),
+            "advisor_chat": f"{'✅' if has_chat_history else '3️⃣'} " + ("AI顾问" if current_locale == "zh_CN" else "AI Chat"),
+            "investment_recs": f"{'✅' if has_recommendations else '4️⃣'} " + ("投资建议" if current_locale == "zh_CN" else "Invest"),
         }
         radio_options = list(nav_labels.values())
         selected_page = st.session_state.get("selected_page", "home")
         if selected_page not in nav_labels:
-            selected_page = "home"
+            selected_page = "bill_upload"  # 默认第一步
         default_index = radio_options.index(nav_labels[selected_page])
         selection_label = st.radio(
-            i18n.t("app.navigation_label"),
+            "📍 " + ("导航" if current_locale == "zh_CN" else "Nav"),
             radio_options,
             index=default_index,
+            label_visibility="collapsed",  # 隐藏标签，进一步节省空间
         )
         selection = next(
             key for key, value in nav_labels.items() if value == selection_label
         )
         st.session_state["selected_page"] = selection
 
-        # ============ 全局Budget设置 (Global Budget Setting) ============
+        # ============ 紧凑Budget设置 ============
         st.markdown("---")
-        st.markdown(f"**{i18n.t('app.global_settings_title')}**")
-
-        # 获取当前budget (Get current budget)
         current_budget = session_utils.get_monthly_budget()
-
-        # Budget输入框 (Budget input)
         new_budget = st.number_input(
-            i18n.t("app.monthly_budget_label"),
+            "💰 " + ("月度预算" if current_locale == "zh_CN" else "Budget"),
             min_value=0.0,
             max_value=1000000.0,
             value=float(current_budget),
             step=500.0,
             format="%.0f",
-            help=i18n.t("app.monthly_budget_help"),
             key="global_budget_sidebar"
         )
-
-        # 更新session state (Update session state)
         if new_budget != current_budget:
             session_utils.set_monthly_budget(new_budget)
-            st.toast(i18n.t("app.budget_updated"))
 
-        # 显示当前预算（带格式化）(Display current budget with formatting)
-        latest_budget = session_utils.get_monthly_budget()
-        st.caption(
-            f"💰 {i18n.t('app.current_budget_display', budget=f'¥{latest_budget:,.0f}')}"
-        )
-
+        # ============ 紧凑数据管理 ============
         st.markdown("---")
-        st.markdown(f"**{i18n.t('app.data_management_title')}**")
-
         col1, col2 = st.columns(2)
 
         with col1:
             if st.button(
-                i18n.t("app.export_data"),
-                help=i18n.t("app.export_data_help"),
+                "📥" if current_locale == "en_US" else "📥",
+                help="导出数据" if current_locale == "zh_CN" else "Export",
                 key="export_data_btn",
                 use_container_width=True,
             ):
@@ -386,7 +413,7 @@ def main() -> None:
                 }
                 json_data = json.dumps(export_data, ensure_ascii=False, indent=2)
                 st.download_button(
-                    label=i18n.t("app.download_json"),
+                    label="⬇️",
                     data=json_data,
                     file_name=f"wefinance_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
                     mime="application/json",
@@ -396,10 +423,9 @@ def main() -> None:
 
         with col2:
             if st.button(
-                i18n.t("app.clear_data"),
-                help=i18n.t("app.clear_data_help"),
+                "🗑️",
+                help="清除数据" if current_locale == "zh_CN" else "Clear",
                 key="clear_data_btn",
-                type="secondary",
                 use_container_width=True,
             ):
                 if st.session_state.get("confirm_clear", False):
@@ -408,7 +434,6 @@ def main() -> None:
                     for state_key in list(st.session_state.keys()):
                         if state_key not in protected_keys:
                             del st.session_state[state_key]
-                    st.toast(i18n.t("app.data_cleared"))
                     st.session_state["confirm_clear"] = False
                     st.session_state["data_restored"] = False
                     st.rerun()
@@ -416,14 +441,7 @@ def main() -> None:
                     st.session_state["confirm_clear"] = True
 
         if st.session_state.get("confirm_clear"):
-            st.warning(i18n.t("app.confirm_clear_warning"))
-
-        st.markdown("---")
-
-        if st.button(i18n.t("app.reset")):
-            reset_session_state()
-            st.success(i18n.t("app.reset_success"))
-            st.rerun()
+            st.caption("⚠️ " + ("再次点击确认" if current_locale == "zh_CN" else "Click again"))
 
     render = PAGES.get(selection)
     if render is None:

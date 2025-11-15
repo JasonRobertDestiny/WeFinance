@@ -1,0 +1,50 @@
+[
+  {
+    "id": "69ecb61342543be4",
+    "date": "2025-11-15",
+    "merchant": "闪购",
+    "category": "餐饮",
+    "amount": 11.26,
+    "currency": "CNY",
+    "payment_method": null,
+    "raw_text": null,
+    "line_items": [],
+    "subtotal": null,
+    "total_discount": null,
+    "tax": null,
+    "receipt_number": null,
+    "receipt_time": null
+  },
+  {
+    "id": "19bf5fe8423ad54c",
+    "date": "2025-11-15",
+    "merchant": "闪购",
+    "category": "餐饮",
+    "amount": 10.92,
+    "currency": "CNY",
+    "payment_method": null,
+    "raw_text": null,
+    "line_items": [],
+    "subtotal": null,
+    "total_discount": null,
+    "tax": null,
+    "receipt_number": null,
+    "receipt_time": null
+  },
+  {
+    "id": "061391dadac6c042",
+    "date": "2025-11-15",
+    "merchant": "天猫",
+    "category": "购物",
+    "amount": 11.56,
+    "currency": "CNY",
+    "payment_method": null,
+    "raw_text": null,
+    "line_items": [],
+    "subtotal": null,
+    "total_discount": null,
+    "tax": null,
+    "receipt_number": null,
+    "receipt_time": null
+  }
+]

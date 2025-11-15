@@ -1,14 +1,34 @@
 {
   "bill_dining.png": {
     "lang": "zh",
-    "desc": "餐饮账单截图"
+    "desc": "餐饮账单截图",
+    "expected_transactions": 4
   },
   "bill_shopping.png": {
     "lang": "zh",
-    "desc": "购物账单截图"
+    "desc": "购物账单截图",
+    "expected_transactions": 3
   },
   "bill_mixed.png": {
     "lang": "zh",
-    "desc": "综合账单截图"
+    "desc": "综合账单截图",
+    "expected_transactions": 4
+  },
+  "real/1.jpg": {
+    "lang": "zh",
+    "desc": "真实账单样本（出租车+滴滴）"
+  },
+  "real/2.png": {
+    "lang": "zh",
+    "desc": "真实账单样本（校园超市）"
+  },
+  "real/3.png": {
+    "lang": "zh",
+    "desc": "真实账单样本（餐饮+日用品）"
+  },
+  "real/4.png": {
+    "lang": "zh",
+    "desc": "真实账单样本（四条流水）",
+    "expected_transactions": 4
   }
 }

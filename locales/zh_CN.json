@@ -82,7 +82,15 @@
     "comparison_multilingual_traditional": "仅中英文",
     "comparison_ai_advisor": "AI财务顾问",
     "comparison_ai_wefinance": "24/7智能对话",
-    "comparison_ai_traditional": "人工咨询（工作日）"
+    "comparison_ai_traditional": "人工咨询（工作日）",
+    "nav_guide_title": "您的进度",
+    "nav_progress": "已完成 {completed}/{total} 步",
+    "nav_next_upload": "👉 建议下一步：上传账单开始记账",
+    "nav_next_insights": "👉 建议下一步：查看您的消费分析",
+    "nav_next_chat": "👉 建议下一步：向AI顾问咨询理财问题",
+    "nav_next_invest": "👉 建议下一步：获取专业投资建议",
+    "nav_all_done": "✅ 太棒了！您已完成所有功能体验",
+    "nav_go_button": "前往 →"
   },
   "navigation": {
     "label": "导航",

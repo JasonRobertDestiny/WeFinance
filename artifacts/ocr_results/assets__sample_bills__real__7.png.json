@@ -1,0 +1,50 @@
+[
+  {
+    "id": "e2780009729c4904",
+    "date": "2025-11-15",
+    "merchant": "无人售货",
+    "category": "其他",
+    "amount": 4.9,
+    "currency": "CNY",
+    "payment_method": null,
+    "raw_text": null,
+    "line_items": [],
+    "subtotal": null,
+    "total_discount": null,
+    "tax": null,
+    "receipt_number": null,
+    "receipt_time": null
+  },
+  {
+    "id": "617b07d5e9611cf4",
+    "date": "2025-11-14",
+    "merchant": "智能货柜消费",
+    "category": "其他",
+    "amount": 4.25,
+    "currency": "CNY",
+    "payment_method": null,
+    "raw_text": null,
+    "line_items": [],
+    "subtotal": null,
+    "total_discount": null,
+    "tax": null,
+    "receipt_number": null,
+    "receipt_time": null
+  },
+  {
+    "id": "0f8d4c68d47c5105",
+    "date": "2025-11-11",
+    "merchant": "智能货柜消费",
+    "category": "其他",
+    "amount": 4.75,
+    "currency": "CNY",
+    "payment_method": null,
+    "raw_text": null,
+    "line_items": [],
+    "subtotal": null,
+    "total_discount": null,
+    "tax": null,
+    "receipt_number": null,
+    "receipt_time": null
+  }
+]

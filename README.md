@@ -326,8 +326,13 @@ Check `.env` configuration:
 
 This project is for 2025 Shenzhen International Fintech Competition participation only. Commercial use without authorization is prohibited.
 
+## 👥 Team Information
+
+**Team Name**: 慧眼队 (Huiyan Team)
+**Contact Email**: johnrobertdestiny@gmail.com
+**Competition**: 2025 Shenzhen International Fintech Competition
+
 ## Contact
 
-- Project Lead: WeFinance Team
-- Email: team@wefinance.ai
+For general project inquiries:
 - GitHub: https://github.com/JasonRobertDestiny/WeFinance-Copilot

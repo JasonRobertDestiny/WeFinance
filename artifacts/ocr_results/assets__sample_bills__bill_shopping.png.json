@@ -1,0 +1,50 @@
+[
+  {
+    "id": "5cc2d85f70db37c9",
+    "date": "2025-11-03",
+    "merchant": "淘宝购物",
+    "category": "购物",
+    "amount": 156.8,
+    "currency": "CNY",
+    "payment_method": null,
+    "raw_text": null,
+    "line_items": [],
+    "subtotal": null,
+    "total_discount": null,
+    "tax": null,
+    "receipt_number": null,
+    "receipt_time": null
+  },
+  {
+    "id": "325131d3bedc030a",
+    "date": "2025-11-04",
+    "merchant": "天猫超市",
+    "category": "购物",
+    "amount": 89.0,
+    "currency": "CNY",
+    "payment_method": null,
+    "raw_text": null,
+    "line_items": [],
+    "subtotal": null,
+    "total_discount": null,
+    "tax": null,
+    "receipt_number": null,
+    "receipt_time": null
+  },
+  {
+    "id": "9d16d0a174310f4c",
+    "date": "2025-11-05",
+    "merchant": "京东数码",
+    "category": "购物",
+    "amount": 1299.0,
+    "currency": "CNY",
+    "payment_method": null,
+    "raw_text": null,
+    "line_items": [],
+    "subtotal": null,
+    "total_discount": null,
+    "tax": null,
+    "receipt_number": null,
+    "receipt_time": null
+  }
+]

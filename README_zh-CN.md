@@ -321,8 +321,13 @@ conda info                     # 查看conda信息
 
 本项目仅用于2025深圳国际金融科技大赛参赛，未经授权不得用于商业用途。
 
+## 👥 团队信息
+
+**团队名称**：慧眼队
+**联系邮箱**：johnrobertdestiny@gmail.com
+**参赛项目**：2025年深圳国际金融科技大赛
+
 ## 联系方式
 
-- 项目负责人：WeFinance 团队
-- 邮箱：team@wefinance.ai
+项目相关咨询：
 - GitHub：https://github.com/JasonRobertDestiny/WeFinance-Copilot

@@ -82,7 +82,15 @@
     "comparison_multilingual_traditional": "CN/EN only",
     "comparison_ai_advisor": "AI Financial Advisor",
     "comparison_ai_wefinance": "24/7 Smart Chat",
-    "comparison_ai_traditional": "Human consultant (weekdays)"
+    "comparison_ai_traditional": "Human consultant (weekdays)",
+    "nav_guide_title": "Your Progress",
+    "nav_progress": "{completed}/{total} steps completed",
+    "nav_next_upload": "👉 Next: Upload bills to start tracking",
+    "nav_next_insights": "👉 Next: View your spending insights",
+    "nav_next_chat": "👉 Next: Chat with AI financial advisor",
+    "nav_next_invest": "👉 Next: Get professional investment advice",
+    "nav_all_done": "✅ Great! You've explored all features",
+    "nav_go_button": "Go →"
   },
   "navigation": {
     "label": "Navigation",

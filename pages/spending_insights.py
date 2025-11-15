@@ -16,6 +16,7 @@ from modules.analysis import (
     generate_insights,
 )
 from utils import session as session_utils
+from utils.ui_components import render_financial_health_card
 
 
 @st.cache_data(show_spinner=False)
@@ -146,6 +147,9 @@ def render() -> None:
     if not transactions:
         st.warning(i18n.t("spending.require_upload"))
         return
+
+    # 显示财务健康卡片（整合预算与支出）
+    render_financial_health_card(transactions)
 
     trusted_merchants = session_utils.get_trusted_merchants()
     _render_sidebar_controls(trusted_merchants, i18n)
