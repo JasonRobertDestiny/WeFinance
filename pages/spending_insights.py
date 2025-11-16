@@ -59,7 +59,7 @@ def _render_active_anomalies(
         st.caption(
             i18n.t("spending.anomaly_threshold", threshold=f"{threshold_used:.1f}")
         )
-    for anomaly in anomalies:
+    for idx, anomaly in enumerate(anomalies):
         date_str = anomaly.get("date") or "-"
         merchant = anomaly.get("merchant", "未知商户")
         amount = anomaly.get("amount", 0.0)
@@ -73,8 +73,8 @@ def _render_active_anomalies(
             if reason:
                 st.caption(reason)
             cols = st.columns(2)
-            confirm_key = f"confirm_{anomaly['transaction_id']}"
-            fraud_key = f"fraud_{anomaly['transaction_id']}"
+            confirm_key = f"confirm_{idx}_{anomaly['transaction_id']}"
+            fraud_key = f"fraud_{idx}_{anomaly['transaction_id']}"
 
             if cols[0].button(i18n.t("common.btn_confirm"), key=confirm_key):
                 session_utils.record_anomaly_feedback(anomaly, "confirmed")
