@@ -424,7 +424,14 @@ Scan the QR code to join our WeChat group for discussions, support, and updates:
 
 <div align="center">
   <img src="./vx_chat.png" alt="WeChat Group QR Code" width="300"/>
-  <p><em>QR code valid until December 6, 2025. Will be updated after expiration.</em></p>
+  <p><em>QR code valid until December 12, 2025. Will be updated after expiration.</em></p>
+</div>
+
+**Can't scan the group QR code?** Add the maintainer's personal WeChat and request to join:
+
+<div align="center">
+  <img src="./personal_vx.png" alt="Personal WeChat QR Code" width="300"/>
+  <p><em>WeChat ID: Destiny (Singapore)</em></p>
 </div>
 
 ---

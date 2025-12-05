@@ -424,7 +424,14 @@ python scripts/test_vision_ocr.py --show-details --dump-json
 
 <div align="center">
   <img src="./vx_chat.png" alt="微信群二维码" width="300"/>
-  <p><em>二维码有效期至2025年12月6日，过期后将更新</em></p>
+  <p><em>二维码有效期至2025年12月12日，过期后将更新</em></p>
+</div>
+
+**群二维码过期？** 添加维护者个人微信，备注"WeFinance"申请入群：
+
+<div align="center">
+  <img src="./personal_vx.png" alt="个人微信二维码" width="300"/>
+  <p><em>微信号：Destiny（新加坡）</em></p>
 </div>
 
 ---
