@@ -355,29 +355,28 @@ function setupRecommendPanel() {
 async function main() {
   anna = await AnnaAppRuntime.connect();
 
-  const persisted = anna.runtimeState?.transactions;
-  if (Array.isArray(persisted)) {
-    state.transactions = persisted;
+  // Read back through anna.storage.get() -- NOT anna.runtimeState, which is
+  // a one-time snapshot from the window "hello" handshake and is never
+  // updated by anna.storage.set(). Those are two separate backends; writing
+  // to one and reading from the other is why data looked persisted within
+  // a session but reset to empty on every reopen.
+  const [storedTransactions, storedBudget] = await Promise.all([
+    anna.storage.get({ key: "transactions" }),
+    anna.storage.get({ key: "budget" }),
+  ]);
+  if (storedTransactions?.exists && Array.isArray(storedTransactions.value)) {
+    state.transactions = storedTransactions.value;
     renderTransactionTable(state.transactions);
   }
-  const persistedBudget = anna.runtimeState?.budget;
-  if (typeof persistedBudget === "number" && persistedBudget >= 0) {
-    state.budget = persistedBudget;
+  if (
+    storedBudget?.exists &&
+    typeof storedBudget.value === "number" &&
+    storedBudget.value >= 0
+  ) {
+    state.budget = storedBudget.value;
   }
   refreshTransactionCounts();
   renderOverview();
-
-  anna.on("runtime_state_synced", (syncedState) => {
-    if (Array.isArray(syncedState?.transactions)) {
-      state.transactions = syncedState.transactions;
-      renderTransactionTable(state.transactions);
-      refreshTransactionCounts();
-    }
-    if (typeof syncedState?.budget === "number" && syncedState.budget >= 0) {
-      state.budget = syncedState.budget;
-    }
-    renderOverview();
-  });
 
   setupTabs();
   setupOverviewPanel();

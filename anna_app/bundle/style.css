@@ -249,13 +249,13 @@ button:disabled {
   font-size: 17px;
   font-weight: 600;
   border: none;
-  border-bottom: 1px dotted var(--border);
+  border-bottom: 1px dotted var(--text-dim);
   background: transparent;
   color: var(--text);
 }
 
 .health-value input:hover {
-  border-bottom-color: var(--text-dim);
+  border-bottom-color: var(--accent-dim);
 }
 
 .health-value input:focus {
